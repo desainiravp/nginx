@@ -42,13 +42,13 @@ def analyze_logs(logs):
     """
 
     response = requests.post(
-        "http://localhost:11434/api/generate",
-        json={
-            "model": "llama3",
-            "prompt": prompt,
-            "stream": False
-        }
-    )
+    "http://localhost:11434/api/generate",
+    json={
+        "model": "llama3:latest",
+        "prompt": prompt,
+        "stream": False
+    }
+)
 
     result = response.json()["response"]
     print("AI Result:", result)

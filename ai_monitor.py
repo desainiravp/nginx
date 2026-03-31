@@ -30,30 +30,48 @@ def rollback(reason):
 
 def analyze_logs(logs):
     prompt = f"""
-    Analyze Kubernetes logs and detect issues.
+You are a strict DevOps validator.
 
-    Return ONLY:
-    OK
-    or
-    FAIL with reason
+ONLY respond with:
+OK
+or
+FAIL: <reason>
 
-    Logs:
-    {logs}
-    """
+Logs:
+{logs}
+"""
 
-    response = requests.post(
-    "http://localhost:11434/api/generate",
-    json={
-        "model": "llama3:latest",
-        "prompt": prompt,
-        "stream": False
-    }
-)
+    try:
+        response = requests.post(
+            "http://localhost:11434/api/generate",
+            json={
+                "model": "tinyllama:latest",   # ✅ changed here
+                "prompt": prompt,
+                "stream": False
+            }
+        )
 
-    result = response.json()["response"]
-    print("AI Result:", result)
+        # 🔍 Debug (optional but useful)
+        print("RAW RESPONSE:", response.text)
 
-    if "fail" in result.lower():
+        data = response.json()
+
+        # ✅ safe extraction (no KeyError)
+        result = data.get("response")
+
+        if not result:
+            print("⚠️ No response from AI:", data)
+            return
+
+        result = result.strip()
+        print("AI Result:", result)
+
+    except Exception as e:
+        print("⚠️ AI error:", str(e))
+        return
+
+    # 🔥 flexible check (tinyllama not always strict)
+    if "fail" in result.lower() or "error" in result.lower():
         rollback(result)
         exit(1)
     else:

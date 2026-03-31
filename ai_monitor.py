@@ -5,7 +5,7 @@ DEPLOYMENT_NAME = "nginx-deployment"
 APP_LABEL = "nginx"
 
 
-# 🔥 Check pod status FIRST (most reliable)
+# 🔥 1. Check pod status (most reliable)
 def check_pod_status():
     output = subprocess.check_output(
         f"kubectl get pods -l app={APP_LABEL}",
@@ -14,13 +14,18 @@ def check_pod_status():
 
     print("📊 POD STATUS:\n", output)
 
-    if "crashloopbackoff" in output or "error" in output or "imagepullbackoff" in output:
+    if (
+        "crashloopbackoff" in output
+        or "error" in output
+        or "imagepullbackoff" in output
+        or "errimagepull" in output
+    ):
         print("❌ Pod status indicates failure")
-        rollback("Pod failure detected (CrashLoop/ImagePull)")
+        rollback("Pod failure detected")
         exit(1)
 
 
-# 🔥 Get logs from ALL pods
+# 🔥 2. Get logs from ALL pods
 def get_pod_logs():
     pods = subprocess.check_output(
         f"kubectl get pods -l app={APP_LABEL} -o jsonpath='{{.items[*].metadata.name}}'",
@@ -37,12 +42,13 @@ def get_pod_logs():
                 shell=True
             ).decode()
             all_logs += f"\n--- Logs from {pod} ---\n{logs}\n"
-        except:
-            all_logs += f"\n--- Logs from {pod} ---\nERROR fetching logs\n"
+        except Exception as e:
+            all_logs += f"\n--- Logs from {pod} ---\nERROR fetching logs: {str(e)}\n"
 
     return all_logs
 
 
+# 🔥 3. Rollback deployment
 def rollback(reason):
     print("🔁 Rolling back deployment...")
     subprocess.call(
@@ -52,16 +58,19 @@ def rollback(reason):
     print(f"Rollback done. Reason: {reason}")
 
 
+# 🔥 4. AI + Rule-based analysis
 def analyze_logs(logs):
     prompt = f"""
-You are a strict DevOps validator.
+You are a Kubernetes log analyzer.
 
-ONLY respond with:
+ONLY return:
 OK
 or
 FAIL: <reason>
 
-Do not repeat logs.
+If logs are normal, return OK.
+Do NOT invent issues.
+Do NOT assume missing logs.
 
 Logs:
 {logs}
@@ -92,31 +101,36 @@ Logs:
         print("⚠️ AI error:", str(e))
         return
 
-    # 🔥 fallback keyword detection (important)
+    # 🔥 PRIMARY: Real log-based detection (most reliable)
     logs_lower = logs.lower()
+
     error_keywords = [
         "error",
         "exception",
         "failed",
-        "connection refused",
         "crashloopbackoff",
-        "oomkilled"
+        "oomkilled",
+        "connection refused",
+        "panic"
     ]
 
     if any(keyword in logs_lower for keyword in error_keywords):
-        print("❌ Error detected in logs")
+        print("❌ Real issue detected from logs")
         rollback("Detected error in logs")
         exit(1)
 
-    # 🔥 AI-based decision
-    if "fail" in result.lower():
+    # 🔥 SECONDARY: AI decision (controlled)
+    if result.lower().startswith("fail"):
+        print("⚠️ AI detected failure:", result)
         rollback(result)
         exit(1)
 
+    # ✅ Final success
     print("✅ Deployment looks healthy")
 
 
+# 🚀 MAIN
 if __name__ == "__main__":
-    check_pod_status()   # 🔥 NEW (critical)
-    logs = get_pod_logs()
-    analyze_logs(logs)
+    check_pod_status()     # ✅ Step 1: pod health
+    logs = get_pod_logs()  # ✅ Step 2: logs
+    analyze_logs(logs)     # ✅ Step 3: AI + rules

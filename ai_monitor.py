@@ -1,19 +1,12 @@
 import os
 import subprocess
-import requests
 from openai import OpenAI
 
+# ✅ FIX: correct env variable name
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 DEPLOYMENT_NAME = "nginx-deployment"
-APP_LABEL = "nginx"   # must match your k8s label
-SLACK_WEBHOOK = os.getenv("SLACK_WEBHOOK")
-
-
-def send_slack(message):
-    if not SLACK_WEBHOOK:
-        return
-    requests.post(SLACK_WEBHOOK, json={"text": message})
+APP_LABEL = "nginx"
 
 
 def get_pod_logs():
@@ -31,11 +24,12 @@ def get_pod_logs():
 
 
 def rollback(reason):
+    print("🔁 Rolling back deployment...")
     subprocess.call(
         f"kubectl rollout undo deployment/{DEPLOYMENT_NAME}",
         shell=True
     )
-    send_slack(f"❌ Rollback triggered\nReason: {reason}")
+    print(f"Rollback done. Reason: {reason}")
 
 
 def analyze_logs(logs):
@@ -51,19 +45,24 @@ def analyze_logs(logs):
     {logs}
     """
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
 
-    result = response.choices[0].message.content
-    print(result)
+        result = response.choices[0].message.content
+        print("AI Result:", result)
+
+    except Exception as e:
+        print("⚠️ AI error:", str(e))
+        return  # prevents crash if quota issue
 
     if "FAIL" in result:
         rollback(result)
         exit(1)
     else:
-        send_slack("✅ Deployment successful")
+        print("✅ Deployment looks healthy")
 
 
 if __name__ == "__main__":

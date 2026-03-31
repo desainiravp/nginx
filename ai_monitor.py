@@ -1,9 +1,5 @@
-import os
 import subprocess
-from openai import OpenAI
-
-# ✅ FIX: correct env variable name
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+import requests
 
 DEPLOYMENT_NAME = "nginx-deployment"
 APP_LABEL = "nginx"
@@ -45,20 +41,19 @@ def analyze_logs(logs):
     {logs}
     """
 
-    try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
+    response = requests.post(
+        "http://localhost:11434/api/generate",
+        json={
+            "model": "llama3",
+            "prompt": prompt,
+            "stream": False
+        }
+    )
 
-        result = response.choices[0].message.content
-        print("AI Result:", result)
+    result = response.json()["response"]
+    print("AI Result:", result)
 
-    except Exception as e:
-        print("⚠️ AI error:", str(e))
-        return  # prevents crash if quota issue
-
-    if "FAIL" in result:
+    if "fail" in result.lower():
         rollback(result)
         exit(1)
     else:

@@ -16,7 +16,7 @@ spec:
     spec:
       containers:
       - name: nginx
-        image: nginx:latest
+        image: ngnx:latest
      #   command: ["wrong-command"]
         ports:
         - containerPort: 80
